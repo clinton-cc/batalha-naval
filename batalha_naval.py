@@ -36,7 +36,7 @@ class BatalhaNaval:
                             tabuleiro[x + i][y] = nome[0]
                         colocado = True
 
-    def mostrar_tabuleiro(self, tabuleiro, jogador,modo_ataque=False):
+    def mostrar_tabuleiro(self, tabuleiro, jogador,modo_ataque=True):
         print(f"Afunde um navio!, Jogador {jogador}:")
         print("  " + " ".join(map(str, range(self.tamanho))))
         for idx, linha in enumerate(tabuleiro):
@@ -50,7 +50,7 @@ class BatalhaNaval:
     def ataque(self, tabuleiro, x, y):
         with self.lock:
             if tabuleiro[x][y] in ['P', 'E', 'C', 'S', 'D']:
-                tabuleiro[x][y] = 'X'
+                tabuleiro [x][y]=='X'
                 return True
             elif tabuleiro[x][y] == '~':
                 tabuleiro[x][y] = 'O'
