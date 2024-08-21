@@ -17,13 +17,15 @@ class BatalhaNaval:
             ('Submarino', 3),
             ('Destroier', 2)
         ]
+        self.navios_posicionados = {}  # Para rastrear as posições de cada navio
+        self.total_navios = len(self.navios)
         self.colocar_navios()
 
-    def colocar_navios(self):
+    def colocar_navios(self): # Posiciona os navios no tabuleiro
         for nome, tamanho in self.navios:
             colocado = False
-            tentativas = 0  # Contador de tentativas para evitar loops infinitos
-            while not colocado and tentativas < 100:
+            tentativas = 0
+            while not colocado and tentativas < 100: # Faz até 100 tentativas de posicionar todos os barcos no tabuleiro
                 tentativas += 1
                 orientacao = random.choice(['H', 'V'])
                 if orientacao == 'H':
@@ -32,6 +34,7 @@ class BatalhaNaval:
                     if all(self.tabuleiro[x][y + i] == '~' for i in range(tamanho)):
                         for i in range(tamanho):
                             self.tabuleiro[x][y + i] = nome[0]
+                        self.navios_posicionados[nome[0]] = [(x, y + i) for i in range(tamanho)]
                         colocado = True
                 else:
                     x = random.randint(0, self.tamanho - tamanho)
@@ -39,11 +42,12 @@ class BatalhaNaval:
                     if all(self.tabuleiro[x + i][y] == '~' for i in range(tamanho)):
                         for i in range(tamanho):
                             self.tabuleiro[x + i][y] = nome[0]
+                        self.navios_posicionados[nome[0]] = [(x + i, y) for i in range(tamanho)]
                         colocado = True
             if not colocado:
                 raise ValueError(f"Não foi possível colocar o navio {nome} no tabuleiro.")
 
-    def mostrar_tabuleiro(self):
+    def mostrar_tabuleiro(self): #Saída do tabuleiro
         print("  " + " ".join(map(str, range(self.tamanho))))
         for idx, linha in enumerate(self.tabuleiro):
             linha_oculta = []
@@ -54,7 +58,7 @@ class BatalhaNaval:
                     linha_oculta.append('~')  # Esconde as embarcações
             print(f"{idx} " + ' '.join(linha_oculta))
 
-    def ataque(self, jogador, x, y):
+    def ataque(self, jogador, x, y): # Define caso o ataque for bem sucedido ou não
         if self.tabuleiro[x][y] in ['P', 'E', 'C', 'S', 'D']:
             self.tabuleiro[x][y] = f"J{jogador}"
             return True
@@ -63,40 +67,56 @@ class BatalhaNaval:
         return False
 
     def verificar_navio_afundado(self, jogador):
-        for nome, tamanho in self.navios:
-            posicoes = [(i, j) for i in range(self.tamanho) for j in range(self.tamanho) if self.tabuleiro[i][j] == nome[0]]
-            if len(posicoes) > 0 and all(self.tabuleiro[x][y] == f"J{jogador}" for x, y in posicoes):
-                self.embarcacoes_afundadas[jogador] += 1
-                # Marca todas as posições do navio afundado com um identificador
-                for x, y in posicoes:
-                    self.tabuleiro[x][y] = f"A{jogador}"
+        for simbolo, posicoes in self.navios_posicionados.items():
+            if all(self.tabuleiro[x][y] == f"J{jogador}" for x, y in posicoes):
+                # Verifica se o navio já foi afundado
+                if any(self.tabuleiro[x][y] == simbolo for x, y in posicoes):
+                    continue  # O navio já foi afundado, passa para o próximo
 
-    def verificar_vitoria(self):
-        total_navios = len(self.navios)
-        for jogador in [1, 2]:
-            if self.embarcacoes_afundadas[jogador] == total_navios:
-                self.jogo_acabou = True
-                return True
-        return False
+                # Incrementa o número de navios afundados do jogador
+                self.embarcacoes_afundadas[jogador] += 1
+                
+                # Decrementa o total de navios restantes
+                self.total_navios -= 1
+                
+                print(f"Jogador {jogador} afundou o navio '{simbolo}'!")
+
+        # Verifica se todos os navios foram afundados
+        if self.total_navios == 0:
+            self.jogo_acabou = True
+            self.verificar_vencedor()
+
+    def verificar_vencedor(self):
+        #Verifica quem afundou mais navios e declara o vencedor.
+        if self.embarcacoes_afundadas[1] > self.embarcacoes_afundadas[2]:
+            print("Jogador 1 venceu a partida com mais navios afundados!")
+        elif self.embarcacoes_afundadas[2] > self.embarcacoes_afundadas[1]:
+            print("Jogador 2 venceu a partida com mais navios afundados!")
+        else:
+            print("O jogo terminou empatado!")
+
+    def alternar_turno(self):
+        #Alterna o turno após verificar se o jogo acabou.
+        with self.condition:
+            if not self.jogo_acabou:
+                self.turno_jogador = 2 if self.turno_jogador == 1 else 1
+                self.condition.notify_all()
 
     def esperar_turno(self, jogador):
+        #Espera até que seja o turno do jogador atual.
         with self.condition:
             while self.turno_jogador != jogador and not self.jogo_acabou:
                 self.condition.wait()
 
-    def alternar_turno(self):
-        with self.condition:
-            self.turno_jogador = 2 if self.turno_jogador == 1 else 1
-            self.condition.notify_all()
-
-def jogada(jogo:BatalhaNaval, jogador):
-    tiros = 5
+def jogada(jogo: BatalhaNaval, jogador): 
+    #Organiza a ordem dos processos 
+    tiros = 5 #Número total de disparos disponíveis
     while tiros > 0 and not jogo.jogo_acabou:
-        jogo.esperar_turno(jogador)
+        jogo.esperar_turno(jogador) #
 
         if jogo.jogo_acabou:
             break
-
+        
         with jogo.lock:
             print(f"Jogador {jogador}, é a sua vez. Você tem {tiros} tiros restantes.")
             jogo.mostrar_tabuleiro()
@@ -117,24 +137,22 @@ def jogada(jogo:BatalhaNaval, jogador):
         if acertou:
             with jogo.lock:
                 print("Acertou um navio!")
-                tiros -= 1
+                tiros -= 1 # Decrementa o valor total de disparos
+
+            # Verifica se o navio foi afundado após o acerto
             jogo.verificar_navio_afundado(jogador)
-            if jogo.verificar_vitoria():
-                with jogo.lock:
-                    print(f"Jogador {jogador} venceu o jogo!")
-                return
         else:
             with jogo.lock:
                 print("Tiro na água.")
             tiros = 5  # Reinicia o número de tiros restantes
             jogo.alternar_turno()  # Passa a vez para o próximo jogador
 
-def thread_jogador(jogo:BatalhaNaval, jogador):
+def thread_jogador(jogo: BatalhaNaval, jogador):
     while not jogo.jogo_acabou:
         jogada(jogo, jogador)
 
 def main():
-    tamanho = 5
+    tamanho = 10
     jogo = BatalhaNaval(tamanho)
 
     thread1 = threading.Thread(target=thread_jogador, args=(jogo, 1))
@@ -148,13 +166,6 @@ def main():
 
     print(f"Resultado Final: Jogador 1 afundou {jogo.embarcacoes_afundadas[1]} embarcações.")
     print(f"Resultado Final: Jogador 2 afundou {jogo.embarcacoes_afundadas[2]} embarcações.")
-
-    if jogo.embarcacoes_afundadas[1] > jogo.embarcacoes_afundadas[2]:
-        print("Jogador 1 venceu a partida!")
-    elif jogo.embarcacoes_afundadas[1] < jogo.embarcacoes_afundadas[2]:
-        print("Jogador 2 venceu a partida!")
-    else:
-        print("A partida terminou empatada!")
 
 if __name__ == "__main__":
     main()
